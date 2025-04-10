@@ -1,0 +1,150 @@
+import org.hibernate.SessionFactory; import org.hibernate.cfg.Configuration; import org.hibernate.Session; import org.springframework.context.annotation.*; import org.springframework.orm.hibernate5.HibernateTransactionManager; import org.springframework.transaction.annotation.EnableTransactionManagement; import org.springframework.transaction.annotation.Transactional;
+
+import javax.persistence.*;
+
+@Configuration @EnableTransactionManagement @ComponentScan(basePackages = "banking") public class BankingApp {
+
+// ============ Entities ============
+
+@Entity
+@Table(name = "accounts")
+public static class Account {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    private String owner;
+    private double balance;
+
+    public Account() {}
+    public Account(String owner, double balance) {
+        this.owner = owner;
+        this.balance = balance;
+    }
+
+    // Getters and setters
+    public int getId() { return id; }
+    public String getOwner() { return owner; }
+    public double getBalance() { return balance; }
+    public void setBalance(double balance) { this.balance = balance; }
+
+    public String toString() {
+        return "Account[id=" + id + ", owner=" + owner + ", balance=" + balance + "]";
+    }
+}
+
+@Entity
+@Table(name = "transactions")
+public static class TransactionRecord {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    private int fromAccount;
+    private int toAccount;
+    private double amount;
+
+    public TransactionRecord() {}
+    public TransactionRecord(int from, int to, double amount) {
+        this.fromAccount = from;
+        this.toAccount = to;
+        this.amount = amount;
+    }
+
+    public String toString() {
+        return "Transaction[id=" + id + ", from=" + fromAccount + ", to=" + toAccount + ", amount=" + amount + "]";
+    }
+}
+
+// ============ DAO Service ============
+
+@org.springframework.stereotype.Service
+public static class BankService {
+    private final SessionFactory sessionFactory;
+
+    public BankService(SessionFactory sessionFactory) {
+        this.sessionFactory = sessionFactory;
+    }
+
+    @Transactional
+    public void transferMoney(int fromId, int toId, double amount, boolean fail) {
+        Session session = sessionFactory.getCurrentSession();
+
+        Account from = session.get(Account.class, fromId);
+        Account to = session.get(Account.class, toId);
+
+   if (from.getBalance() < amount) {
+            throw new RuntimeException("Insufficient funds.");
+        }
+
+        from.setBalance(from.getBalance() - amount);
+        to.setBalance(to.getBalance() + amount);
+
+        session.save(new TransactionRecord(fromId, toId, amount));
+
+        if (fail) {
+            throw new RuntimeException("Forced failure to test rollback.");
+        }
+    }
+
+    @Transactional
+    public void createAccounts() {
+        Session session = sessionFactory.getCurrentSession();
+        session.save(new Account("Alice", 1000));
+        session.save(new Account("Bob", 500));
+    }
+
+    @Transactional
+    public void showAccounts() {
+        Session session = sessionFactory.getCurrentSession();
+        session.createQuery("from BankingApp$Account", Account.class).list()
+               .forEach(System.out::println);
+    }
+}
+
+// ============ Spring Beans ============
+
+@Bean
+public SessionFactory sessionFactory() {
+    return new Configuration()
+            .configure("hibernate.cfg.xml")
+            .addAnnotatedClass(Account.class)
+            .addAnnotatedClass(TransactionRecord.class)
+            .buildSessionFactory();
+}
+
+@Bean
+public HibernateTransactionManager transactionManager(SessionFactory sf) {
+    return new HibernateTransactionManager(sf);
+}
+
+// ============ Main Method ============
+
+public static void main(String[] args) {
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(BankingApp.class);
+    BankService bankService = context.getBean(BankService.class);
+
+    System.out.println("Creating accounts...");
+    bankService.createAccounts();
+
+    System.out.println("\nAccounts BEFORE transfer:");
+    bankService.showAccounts();
+
+    try {
+        System.out.println("\nPerforming successful transfer...");
+        bankService.transferMoney(1, 2, 200, false);
+    } catch (Exception e) {
+        System.out.println("Transfer failed: " + e.getMessage());
+    }
+
+    try {
+        System.out.println("\nPerforming FAILED transfer (should rollback)...");
+        bankService.transferMoney(1, 2, 300, true); // This will fail and rollback
+    } catch (Exception e) {
+        System.out.println("Transfer failed: " + e.getMessage());
+    }
+
+    System.out.println("\nAccounts AFTER transfers:");
+    bankService.showAccounts();
+
+    context.close();
+}
+}

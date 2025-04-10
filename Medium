@@ -1,0 +1,74 @@
+import org.hibernate.*; import org.hibernate.cfg.Configuration;
+
+import javax.persistence.*;
+
+// 1. Entity Class @Entity @Table(name = "students") class Student { @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private int id;
+
+private String name;
+private int age;
+
+public Student() {} // Required by Hibernate
+
+public Student(String name, int age) {
+    this.name = name;
+    this.age = age;
+}
+
+// Getters & setters
+public int getId() { return id; }
+public String getName() { return name; }
+public int getAge() { return age; }
+
+public void setName(String name) { this.name = name; }
+public void setAge(int age) { this.age = age; }
+
+public String toString() {
+    return "Student [id=" + id + ", name=" + name + ", age=" + age + "]";
+}
+}
+
+// 2. Main Class public class MainApp { public static void main(String[] args) { SessionFactory factory = new Configuration().configure("hibernate.cfg.xml") .addAnnotatedClass(Student.class) .buildSessionFactory();
+
+    // Create
+    try (Session session = factory.getCurrentSession()) {
+        Student student = new Student("John Doe", 22);
+        session.beginTransaction();
+        session.save(student);
+session.getTransaction().commit();
+        System.out.println("Created: " + student);
+    }
+
+    int studentId = 1; // Use appropriate ID (likely auto-generated)
+
+    // Read
+    try (Session session = factory.getCurrentSession()) {
+        session.beginTransaction();
+        Student student = session.get(Student.class, studentId);
+        System.out.println("Read: " + student);
+        session.getTransaction().commit();
+    }
+
+    // Update
+    try (Session session = factory.getCurrentSession()) {
+        session.beginTransaction();
+        Student student = session.get(Student.class, studentId);
+        student.setAge(25);
+        session.getTransaction().commit();
+        System.out.println("Updated: " + student);
+    }
+
+    // Delete
+    try (Session session = factory.getCurrentSession()) {
+        session.beginTransaction();
+        Student student = session.get(Student.class, studentId);
+        if (student != null) {
+session.delete(student);
+            System.out.println("Deleted: " + student);
+        }
+        session.getTransaction().commit();
+    }
+
+    factory.close();
+}
+}
+
